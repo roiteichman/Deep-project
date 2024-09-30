@@ -2,44 +2,8 @@ import torch
 from AutoDecoder import AutoDecoder
 from utils import create_dataloaders, plot_tsne
 from evaluate import evaluate_model
-import pandas as pd
-import os
 
-
-# Preprocess the CSV file to ensure it has the correct numeric data types
-def preprocess_csv(file_path):
-    data = pd.read_csv(file_path)
-
-    # Convert all columns to numeric (use coerce to handle any potential non-numeric values)
-    data = data.apply(pd.to_numeric, errors='coerce')
-
-    # Fill any NaN values with 0 (or an appropriate value)
-    data = data.fillna(0)
-
-    # Ensure that all data is in float32 format
-    return data.astype(float)
-
-
-# Save the preprocessed CSV back
-def save_preprocessed_csv(data, file_path):
-    data.to_csv(file_path, index=False)
-
-
-# Preprocess both the training and test CSV files
-train_data_path = 'dataset/fashion-mnist_train.csv'
-test_data_path = 'dataset/fashion-mnist_test.csv'
-
-# Preprocess the CSV files
-train_data = preprocess_csv(train_data_path)
-test_data = preprocess_csv(test_data_path)
-
-# Save the preprocessed files (optional: overwrite the originals or save as new files)
-preprocessed_train_data_path = 'dataset/preprocessed_fashion-mnist_train.csv'
-preprocessed_test_data_path = 'dataset/preprocessed_fashion-mnist_test.csv'
-save_preprocessed_csv(train_data, preprocessed_train_data_path)
-save_preprocessed_csv(test_data, preprocessed_test_data_path)
-
-# Now use the preprocessed CSV files in the create_dataloaders function
+# Load the dataset
 train_ds, train_dl, test_ds, test_dl = create_dataloaders(data_path='dataset', batch_size=64)
 
 # Initialize the AutoDecoder model
