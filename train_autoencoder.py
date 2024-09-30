@@ -2,8 +2,31 @@ import torch
 from AutoDecoder import AutoDecoder
 from utils import create_dataloaders, plot_tsne
 from evaluate import evaluate_model
+import pandas as pd
+
+
+# Define a preprocessing function for the dataset
+def preprocess_dataset(file_path):
+    data = pd.read_csv(file_path)
+
+    # Convert the data to numeric values (this is an extra precaution)
+    data = data.apply(pd.to_numeric, errors='coerce')
+
+    # Ensure it's in float32 format to match PyTorch expectations
+    data = data.fillna(0).astype(float)
+
+    return data
+
 
 # Load the dataset
+train_data_path = 'dataset/fashion-mnist_train.csv'
+test_data_path = 'dataset/fashion-mnist_test.csv'
+
+# Preprocess the datasets
+preprocess_dataset(train_data_path)
+preprocess_dataset(test_data_path)
+
+# Load the data using the existing utils.py function
 train_ds, train_dl, test_ds, test_dl = create_dataloaders(data_path='dataset', batch_size=64)
 
 # Initialize the AutoDecoder model
