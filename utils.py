@@ -55,16 +55,28 @@ def create_dataloaders(data_path: str = 'data', **dl_args):
 
 class FashionDataset(Dataset):
     def __init__(self, data_path):
-        data = torch.from_numpy(pandas.read_csv(data_path).values)[:1000]
-        self.X = data[:, 1:].reshape(-1, 28, 28)
-        self.y = data[:, 0]
+        # Check if the file exists
+        if not os.path.exists(data_path):
+            raise FileNotFoundError(f"CSV file not found: {data_path}")
+
+        # Read the CSV file
+        data = pandas.read_csv(data_path)
+
+        # Convert all columns to numeric, coerce errors (replace non-numeric values with NaN)
+        data = data.apply(pd.to_numeric, errors='coerce')
+
+        # Fill any NaN values with 0 (or you could use another strategy)
+        data = data.fillna(0)
+
+        # Convert to a PyTorch tensor
+        data = torch.tensor(data.values, dtype=torch.float32)[:1000]
+
+        # Split into features and labels
+        self.X = data[:, 1:].reshape(-1, 28, 28)  # Image data
+        self.y = data[:, 0]  # Labels (assuming the first column is the label)
 
     def __len__(self):
         return self.X.size(0)
 
     def __getitem__(self, item):
-        """
-        :param item: index of requested item
-        :return: the index and the item
-        """
         return item, self.X[item]
