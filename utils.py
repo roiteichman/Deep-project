@@ -63,7 +63,7 @@ class FashionDataset(Dataset):
         data = pandas.read_csv(data_path)
 
         # Convert all columns to numeric, coerce errors (replace non-numeric values with NaN)
-        data = data.apply(pd.to_numeric, errors='coerce')
+        data = data.apply(pandas.to_numeric, errors='coerce')
 
         # Fill any NaN values with 0 (or you could use another strategy)
         data = data.fillna(0)
