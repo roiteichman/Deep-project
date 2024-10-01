@@ -79,4 +79,4 @@ class FashionDataset(Dataset):
         return self.X.size(0)
 
     def __getitem__(self, item):
-        return item, self.X[item]elf.X[item]
+        return item, self.X[item]
