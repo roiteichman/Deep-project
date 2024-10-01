@@ -55,15 +55,11 @@ def create_dataloaders(data_path: str = 'data', **dl_args):
 
 class FashionDataset(Dataset):
     def __init__(self, data_path):
-        # Check if the file exists
-        if not os.path.exists(data_path):
-            raise FileNotFoundError(f"CSV file not found: {data_path}")
-
         # Read the CSV file
         data = pandas.read_csv(data_path)
 
         # Convert all columns to numeric, coerce errors (replace non-numeric values with NaN)
-        data = data.apply(pd.to_numeric, errors='coerce')
+        data = data.apply(pandas.to_numeric, errors='coerce')
 
         # Fill any NaN values with 0 (or you could use another strategy)
         data = data.fillna(0)
@@ -79,4 +75,8 @@ class FashionDataset(Dataset):
         return self.X.size(0)
 
     def __getitem__(self, item):
-        return item, self.X[item]elf.X[item]
+        """
+        :param item: index of requested item
+        :return: the index and the item
+        """
+        return item, self.X[item]
