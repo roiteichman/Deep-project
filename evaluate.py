@@ -1,6 +1,5 @@
 import torch
 
-
 def reconstruction_loss(x, x_rec):
     """
     :param x: the original images
@@ -14,7 +13,7 @@ def evaluate_model(model, test_dl, opt, latents, epochs, device):
     """
     :param model: the trained model
     :param test_dl: a DataLoader of the test set
-    :param opt: a torch.optim object that optimizes ONLY the test set
+    :param opt: a torch.optim object that optimizes ONLY the test set latents
     :param latents: initial values for the latents of the test set
     :param epochs: how many epochs to train the test set latents for
     :return:
@@ -41,4 +40,3 @@ def evaluate_model(model, test_dl, opt, latents, epochs, device):
         final_loss = sum(losses) / len(losses)
 
     return final_loss
-
