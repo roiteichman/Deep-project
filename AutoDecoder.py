@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 
-
 class AutoDecoder(nn.Module):
     def __init__(self, latent_dim, out_channels=1):
         super().__init__()
@@ -23,4 +22,9 @@ class AutoDecoder(nn.Module):
         )
 
     def forward(self, latents):
-        return self.decoder(latents.view(latents.size(0), self.latent_dim, 1,1)).squeeze(1)
+        out = self.decoder(latents.view(latents.size(0), self.latent_dim, 1,1))
+        
+        # Remove the extra channel dimension to match the target size (batch_size, 28, 28)
+        out = torch.squeeze(out, 1)
+        
+        return out
