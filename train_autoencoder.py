@@ -1,7 +1,7 @@
 import torch
 from AutoDecoder import AutoDecoder
 from utils import create_dataloaders, plot_tsne
-from evaluate import evaluate_model
+from evaluate import evaluate_model, reconstruction_loss
 import matplotlib.pyplot as plt
 import os
 from tqdm import tqdm
@@ -18,6 +18,7 @@ class Trainer:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = AutoDecoder(latent_dim=latent_dim).to(self.device)
         self.criterion = torch.nn.MSELoss()
+        #self.criterion = reconstruction_loss
 
 
 
@@ -59,7 +60,7 @@ class Trainer:
                 for optimizer in optimizers:
                     optimizer.zero_grad()
                 y_reconstructions = self.model(latent_batch)
-                loss = self.criterion(y_reconstructions, data.float())
+                loss = self.criterion(data.float(), y_reconstructions)
                 loss.backward()
                 for optimizer in optimizers:
                     optimizer.step()
@@ -80,38 +81,16 @@ class Trainer:
 
         initial_latents = torch.randn(len(self.test_ds), self.latent_dim, device=self.device)
         optimizer_test = torch.optim.Adam([initial_latents], lr=self.learning_rate)
-        # Training Loop
-        with torch.no_grad():
-            for idx, (i, data) in enumerate(self.test_dl):
-                # Get the corresponding latent vectors for the batch
-                latent_batch = initial_latents[i].to(self.device).detach().requires_grad_(True)
-                data = data.to(self.device)
-                
-                for epoch in range(self.num_epochs):
-                    optimizer_test.zero_grad()
-                    reconstructions = self.model(latent_batch)
-                    loss = self.criterion(reconstructions, data.float())
-                    loss.backward()
-                    optimizer_test.step()
+        loss = evaluate_model(self.model, self.test_dl, optimizer_test, initial_latents, self.num_epochs, self.device)
 
-                total_loss += loss.item()
-                # progress_bar.set_postfix(loss=loss.item())
-
-
-        avg_loss = total_loss / len(self.test_dl)
-        return avg_loss
+        return loss
 
     def train_and_evaluate(self, seperate_optimizers_and_schedulers=True):
         train_loss = self.train_autodecoder(seperate_optimizers_and_schedulers)
         print(f'Training Loss: {train_loss:.4f}')
-        # for epoch in range(self.num_epochs):
+        test_loss = self.test_autodecoder()
+        print(f'Test Loss: {test_loss:.4f}')
 
-        #     print(f'Training Loss: {train_loss:.4f}')
-
-        #     test_loss = self.test_autodecoder()
-        #     print(f'Test Loss: {test_loss:.4f}')
-
-        #     print('-' * 50)
 
 
 
