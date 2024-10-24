@@ -18,7 +18,9 @@ class AutoDecoder(nn.Module):
             nn.BatchNorm2d(64),
             nn.ReLU(True),
 
-            nn.ConvTranspose2d(64, out_channels, kernel_size=3, stride=1, padding=1, bias=False)
+            nn.ConvTranspose2d(64, out_channels, kernel_size=3, stride=1, padding=1, bias=False),
+            #TODO: Add a final activation function here (e.g. nn.Sigmoid()) for normalization purposes
+            nn.Sigmoid()
         )
 
     def forward(self, latents):
@@ -26,5 +28,5 @@ class AutoDecoder(nn.Module):
         
         # Remove the extra channel dimension to match the target size (batch_size, 28, 28)
         out = torch.squeeze(out, 1)
-        
+
         return out
