@@ -35,7 +35,7 @@ class AutoDecoder(nn.Module):
         )
 
     def forward(self, latents):
-        out = self.decoder(latents.view(latents.size(0), self.latent_dim, 1,1))
+        out = self.decoder(latents.view(latents.size(0), self.latent_dim, 1,1).to(self.device))
         # Remove the extra channel dimension to match the target size (batch_size, 28, 28)
         out = torch.squeeze(out, 1)
 
@@ -56,7 +56,7 @@ class AutoDecoder(nn.Module):
                 data = data.float().to(self.device)
 
                 optimizer.zero_grad()
-                y_reconstructions = self(latent_batch)
+                y_reconstructions = self(latent_batch.to(self.device))
                 loss = self.criterion(data, y_reconstructions)
                 loss.backward()
                 optimizer.step()
@@ -70,10 +70,10 @@ class AutoDecoder(nn.Module):
     
     def test_model(self, test_ds, test_dl, num_epochs=100):
         self.eval()
-        initial_latents = torch.randn(len(test_ds), self.latent_dim, requires_grad=True, device=self.device)
-        optimizer_test = torch.optim.Adam([{'params': initial_latents}], lr=self.learning_rate)
+        self.test_latents = torch.randn(len(test_ds), self.latent_dim, requires_grad=True, device=self.device)
+        optimizer_test = torch.optim.Adam([{'params': self.test_latents}], lr=self.learning_rate)
 
-        test_loss = evaluate_model(self, test_dl, optimizer_test, initial_latents, num_epochs, self.device)
+        test_loss = evaluate_model(self, test_dl, optimizer_test, self.test_latents, num_epochs, self.device)
         
         return test_loss
     
@@ -87,6 +87,8 @@ class Trainer:
         self.train_ds, self.train_dl, self.test_ds, self.test_dl = create_dataloaders(data_path=self.data_path, batch_size=self.batch_size)
         
         self.model = AutoDecoder(latent_dim=self.latent_dim)
+        self.model.to(self.model.device)
+
 
     def train_and_evaluate(self):
         train_loss = self.model.train_model(self.train_ds, self.train_dl, self.num_epochs)
@@ -114,7 +116,7 @@ class Trainer:
         random_latents = torch.rand(5, self.latent_dim).to(self.model.device)
         random_decoded = self.model(random_latents).view(-1, 28, 28)
 
-        test_latents = self.model.initial_latents[:5]
+        test_latents = self.model.test_latents[:5]
         test_decoded = self.model(test_latents).view(-1, 28, 28)
 
         self.plot_images(random_decoded, "random_latents_images", "Images from Random Latents (U(0, I))")
@@ -122,7 +124,7 @@ class Trainer:
 
     def plot_tsne(self):
         print("Generating t-SNE plot...")
-        plot_tsne(self.test_ds, self.model.initial_latents, file_name='tsne_plot.png', plot_title="t-SNE Visualization of Latents")
+        plot_tsne(self.test_ds, self.model.test_latents, file_name='tsne_plot.png', plot_title="t-SNE Visualization of Latents")
 
 # trainer = Trainer()
 # trainer.train_and_evaluate()
