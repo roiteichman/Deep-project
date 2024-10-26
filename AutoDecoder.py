@@ -98,7 +98,7 @@ class Trainer:
         print(f'Test Loss: {test_loss:.4f}')
         print('Training and Evaluation Complete!')
 
-    def plot_images(self, images, file_name, title):
+    def _plot_images(self, images, file_name, title):
         print("Saving images...")
         os.makedirs('output_images', exist_ok=True)
         fig, axes = plt.subplots(1, 5, figsize=(10, 2))
@@ -119,8 +119,8 @@ class Trainer:
         test_latents = self.model.test_latents[:5]
         test_decoded = self.model(test_latents).view(-1, 28, 28)
 
-        self.plot_images(random_decoded, "random_latents_images", "Images from Random Latents (U(0, I))")
-        self.plot_images(test_decoded, "test_set_latents_images", "Images from Test Set Latents")
+        self._plot_images(random_decoded, "random_latents_images", "Images from Random Latents (U(0, I))")
+        self._plot_images(test_decoded, "test_set_latents_images", "Images from Test Set Latents")
 
     def plot_tsne(self):
         print("Generating t-SNE plot...")
