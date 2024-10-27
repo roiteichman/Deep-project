@@ -14,23 +14,19 @@ class AutoDecoder(nn.Module):
         self.criterion = reconstruction_loss
 
         self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(latent_dim, 256, kernel_size=7, stride=1, padding=0, bias=False),
+            nn.ConvTranspose2d(self.latent_dim, 256, kernel_size=7, stride=1, padding=0, bias=False),
             nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
+            nn.ReLU(True),
 
-            nn.ConvTranspose2d(256, 128, kernel_size=1, stride=1, padding=0, bias=False),
+            nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
+            nn.ReLU(True),
 
-            nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2, padding=0, bias=False),
+            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
+            nn.ReLU(True),
 
-            nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2, padding=0, bias=False),
-            nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
-
-            nn.ConvTranspose2d(32, out_channels, kernel_size=1, stride=1, padding=0, bias=False),
+            nn.ConvTranspose2d(64, out_channels, kernel_size=3, stride=1, padding=1, bias=False),
             nn.Sigmoid()
         )
 
