@@ -9,7 +9,6 @@ class VariationalAutoDecoder(nn.Module):
     def __init__(self, latent_dim=128, data_path='dataset', batch_size=64, lr=0.005):
         super(VariationalAutoDecoder, self).__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.to(self.device)
 
         self.latent_dim = latent_dim
         self.batch_size = batch_size
@@ -17,27 +16,16 @@ class VariationalAutoDecoder(nn.Module):
         self.num_samples_in_dataset = len(self.train_ds)
         self.learning_rate = lr
         
-        self.mus = nn.Parameter(torch.randn(self.num_samples_in_dataset, self.latent_dim))
-        self.log_vars = nn.Parameter(torch.randn(self.num_samples_in_dataset, self.latent_dim))
+        self.mus = torch.randn(self.num_samples_in_dataset, self.latent_dim, requires_grad=True, device=self.device)
+        self.log_vars = torch.randn(self.num_samples_in_dataset, self.latent_dim, requires_grad=True, device=self.device)
 
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        self.decoder = nn.Sequential(nn.Linear(self.latent_dim, 256),
+                                     nn.ReLU(),
+                                     nn.Linear(256, 28*28),
+                                     nn.Sigmoid()).to(self.device)
+        
+        self.optimizer = torch.optim.Adam([{'params': self.parameters()}, {'params': self.mus}, {'params': self.log_vars}], lr=self.learning_rate)
 
-        self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(self.latent_dim, 256, kernel_size=7, stride=1, padding=0, bias=False),
-            nn.BatchNorm2d(256),
-            nn.ReLU(True),
-
-            nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(128),
-            nn.ReLU(True),
-
-            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(64),
-            nn.ReLU(True),
-
-            nn.ConvTranspose2d(64, 1, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.Sigmoid()
-        ).to(self.device)
         
     def _reparameterize(self, mu, log_var):
         """instead of directly learning the variance, 
@@ -47,8 +35,8 @@ class VariationalAutoDecoder(nn.Module):
 
         # sigma = sqrt(var)
         # sigma = sqrt(exp(log_var)) = (exp(log_var))^0.5= exp(0.5 * log_var)
-        sigma = torch.exp(0.5 * log_var) 
-        epsilon = torch.randn_like(sigma)  # Sample from standard normal with same shape as sigma
+        sigma = torch.exp(0.5 * log_var).to(self.device) 
+        epsilon = torch.randn_like(sigma).to(self.device)  # Sample from standard normal with same shape as sigma
         #z=μ+σ⋅ϵ
 
         return mu + sigma * epsilon
@@ -58,18 +46,18 @@ class VariationalAutoDecoder(nn.Module):
         mu , log_var = None, None
         if samples_indices is not None:
             # mu and log_var tensors for the specific samples indices
-            mu = self.mus[samples_indices]
-            log_var = self.log_vars[samples_indices]
+            mu = self.mus[samples_indices].to(self.device)
+            log_var = self.log_vars[samples_indices].to(self.device)
             
             # Sample latent vector z
-            z = self._reparameterize(mu, log_var)
+            z = self._reparameterize(mu, log_var).to(self.device)
         else:
-            z = latent_vector
+            z = latent_vector.to(self.device)
         
         # Decode to generate output
-        z = z.view(z.size(0), self.latent_dim, 1, 1).to(self.device)
+        # z = z.view(z.size(0), self.latent_dim, 1, 1).to(self.device)
         output = self.decoder(z) * 255.0  # Scale output to [0, 255]
-        output = output.view(output.size(0), -1)  # Remove the extra channel dimension to match the target size (batch_size, 28, 28)
+        # output = output.view(output.size(0), -1)  # Remove the extra channel dimension to match the target size (batch_size, 28, 28)
         return output, mu, log_var
 
     def vad_loss(self, recon_x, x, mu: torch.Tensor, log_var: torch.Tensor, beta: float=1.0):
@@ -93,7 +81,7 @@ class VariationalAutoDecoder(nn.Module):
             total_loss = 0
             for batch_idx, (i, data) in enumerate(self.train_dl):
                 data = data.view(i.size(0), -1)  # Flatten images to vector shape (batch_size, 784)
-                data = data.float().to(model.device)
+                data = data.float().to(self.device)
 
                 self.optimizer.zero_grad()
                 
@@ -161,8 +149,8 @@ class VariationalAutoDecoder(nn.Module):
 
             
 
-model = VariationalAutoDecoder()
+# model = VariationalAutoDecoder()
 # train_loss = model.train_model(num_epochs=100)
 # print(f'Training loss: {train_loss:.4f}')
-test_loss = model.test_vad(num_epochs=100)
-print(f'Test loss: {test_loss:.4f}')
+# test_loss = model.test_vad(num_epochs=100)
+# print(f'Test loss: {test_loss:.4f}')
