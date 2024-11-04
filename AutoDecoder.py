@@ -120,7 +120,7 @@ class Trainer:
 
     def plot_tsne(self):
         print("Generating t-SNE plot...")
-        plot_tsne(self.test_ds, self.model.test_latents, file_name='tsne_plot.png', plot_title="t-SNE Visualization of Latents")
+        plot_tsne(self.test_ds, self.model.test_latents, file_name='tsne_plot_AD.png', plot_title="t-SNE Visualization of Latents")
 
 # trainer = Trainer()
 # trainer.train_and_evaluate()

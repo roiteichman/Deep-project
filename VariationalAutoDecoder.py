@@ -19,12 +19,10 @@ class VariationalAutoDecoder(nn.Module):
         self.mus = torch.randn(self.num_samples_in_dataset, self.latent_dim, requires_grad=True, device=self.device)
         self.log_vars = torch.randn(self.num_samples_in_dataset, self.latent_dim, requires_grad=True, device=self.device)
 
-        self.decoder = nn.Sequential(nn.Linear(self.latent_dim, 256),
-                                     nn.ReLU(),
-                                     nn.Linear(256, 28*28),
-                                     nn.Sigmoid()).to(self.device)
-        
+        self.decoder = Decoder(latent_dim=self.latent_dim).to(self.device)
+
         self.optimizer = torch.optim.Adam([{'params': self.parameters()}, {'params': self.mus}, {'params': self.log_vars}], lr=self.learning_rate)
+        self.to(self.device)
 
         
     def _reparameterize(self, mu, log_var):
@@ -42,25 +40,14 @@ class VariationalAutoDecoder(nn.Module):
         return mu + sigma * epsilon
         
 
-    def forward(self, samples_indices=None, latent_vector=None):
-        mu , log_var = None, None
-        if samples_indices is not None:
-            # mu and log_var tensors for the specific samples indices
-            mu = self.mus[samples_indices].to(self.device)
-            log_var = self.log_vars[samples_indices].to(self.device)
-            
-            # Sample latent vector z
-            z = self._reparameterize(mu, log_var).to(self.device)
-        else:
-            z = latent_vector.to(self.device)
-        
+    def forward(self, z):
         # Decode to generate output
         # z = z.view(z.size(0), self.latent_dim, 1, 1).to(self.device)
-        output = self.decoder(z) * 255.0  # Scale output to [0, 255]
-        # output = output.view(output.size(0), -1)  # Remove the extra channel dimension to match the target size (batch_size, 28, 28)
-        return output, mu, log_var
+        output = self.decoder(z)  
+        output = torch.squeeze(output, 1)  # Remove the extra channel dimension to match the target size (batch_size, 28, 28)
+        return output * 255.0 # Scale output to [0, 255]
 
-    def vad_loss(self, recon_x, x, mu: torch.Tensor, log_var: torch.Tensor, beta: float=1.0):
+    def vad_loss(self, recon_x, x, mu: torch.Tensor, log_var: torch.Tensor, beta: float=3.8):
         # Reconstruction loss
         recon_loss = reconstruction_loss(x=x, x_rec=recon_x)
         
@@ -75,21 +62,23 @@ class VariationalAutoDecoder(nn.Module):
         return recon_loss + beta * kl_divergence
 
     # Training the VAD model
-    def train_model(self, num_epochs=100):
+    def train_model(self, num_epochs=100, beta=3.8):
         self.train()
         for epoch in range(num_epochs):
             total_loss = 0
             for batch_idx, (i, data) in enumerate(self.train_dl):
-                data = data.view(i.size(0), -1)  # Flatten images to vector shape (batch_size, 784)
                 data = data.float().to(self.device)
 
                 self.optimizer.zero_grad()
                 
+                mu = self.mus[i].to(self.device)
+                log_var = self.log_vars[i].to(self.device)
+                z = self._reparameterize(mu, log_var).to(self.device)
                 # Forward pass
-                recon_x, mu, log_var = self(samples_indices=i)
+                recon_x = self(z)
                 
                 # Compute loss
-                loss = self.vad_loss(recon_x, data, mu, log_var)
+                loss = self.vad_loss(recon_x=recon_x, x=data, mu=mu, log_var=log_var, beta=beta)
                 loss.backward()
                 self.optimizer.step()
                 
@@ -100,54 +89,42 @@ class VariationalAutoDecoder(nn.Module):
 
         return avg_loss
 
-    def test_vad(self, num_epochs=100):
+    def test_vad(self, num_epochs=100, learnig_rate=0.005):
         self.eval()
         self.test_latents = torch.randn(len(self.test_ds), self.latent_dim, requires_grad=True, device=self.device)
-        optimizer_test = torch.optim.Adam([{'params': self.test_latents}], lr=self.learning_rate)
-        
-        test_loss = self._evaluate_model(optimizer_test, num_epochs)
+        optimizer_test = torch.optim.Adam([{'params': self.test_latents}], lr=learnig_rate)
+        test_loss = evaluate_model(self, self.test_dl, optimizer_test, self.test_latents, num_epochs, self.device)
         return test_loss
-
-    def _evaluate_model(self, opt, epochs):
-        """
-        :param model: the trained model
-        :param test_dl: a DataLoader of the test set
-        :param opt: a torch.optim object that optimizes ONLY the test set latents
-        :param latents: initial values for the latents of the test set
-        :param epochs: how many epochs to train the test set latents for
-        :return:
-        """
-        self.to(self.device)
-        for epoch in range(epochs):
-            for i, x in self.test_dl:
-                i = i.to(self.device)
-                x = x.float().to(self.device)
-                x = x.view(i.size(0), -1)
-                x_rec, _, _ = self(latent_vector=self.test_latents[i].to(self.device))
-                loss = reconstruction_loss(x, x_rec)
-                opt.zero_grad()
-                loss.backward()
-                opt.step()
-
-        losses = []
-        with torch.no_grad():
-            for i, x in self.test_dl:
-                i = i.to(self.device)
-                x = x.float().to(self.device)
-                x = x.view(i.size(0), -1)
-                x_rec, _, _ = self(latent_vector=self.test_latents[i].to(self.device))
-                loss = reconstruction_loss(x, x_rec)
-                losses.append(loss.item())
-
-            final_loss = sum(losses) / len(losses)
-
-        return final_loss
     
     def plot_tsne(self):
         print("Generating t-SNE plot...")
         plot_tsne(self.test_ds, self.test_latents, file_name='tsne_plot_VAD.png', plot_title="t-SNE Visualization of Latents")
 
+class Decoder(torch.nn.Module):
+    def __init__(self, latent_dim=128):
+        super(Decoder, self).__init__()
+        self.decoder = nn.Sequential(
+            nn.Linear(latent_dim, 256 * 7 * 7),  # Map to 256 channels with 7x7 spatial dimensions
+            nn.ReLU(inplace=True),
             
+            # Reshape output from the linear layer to start the convolutional decoding
+            nn.Unflatten(1, (256, 7, 7)),
+
+            nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+
+            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+
+            nn.ConvTranspose2d(64, 1, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        out = self.decoder(x)
+        return out
 
 # model = VariationalAutoDecoder()
 # train_loss = model.train_model(num_epochs=100)
