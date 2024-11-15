@@ -153,9 +153,9 @@ class VariationalAutoDecoder(nn.Module, ABC):
         print(f"Images saved to {output_path}")
         plt.close()
     
-    def plot_tsne(self):
+    def plot_tsne(self, file_name='tsne_plot_VAD.png', plot_title="t-SNE Test Latents - VAD"):
         print("Generating t-SNE plot...")
-        plot_tsne(self.test_ds, self.test_latents, file_name='tsne_plot_VAD.png', plot_title="t-SNE Test Latents - VAD")
+        plot_tsne(self.test_ds, self.test_latents, file_name=file_name, plot_title=plot_title)
 
     def plot_losses(self, recon_losses, kl_losses, total_losses):
 
