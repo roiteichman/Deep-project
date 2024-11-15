@@ -5,6 +5,7 @@ from evaluate import evaluate_model
 from utils import plot_tsne
 import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
+import os
 
 from Decoder import Decoder
 
@@ -118,6 +119,40 @@ class VariationalAutoDecoder(nn.Module, ABC):
                                    num_epochs, self.device)
         return test_loss
     
+    @abstractmethod
+    def get_test_samples_images(self):
+        pass
+    
+    @abstractmethod
+    def get_random_samples_images(self):
+        pass
+    
+    def infer_test_latents(self, file_name, title, num_samples=5):
+
+        test_latents = self.test_latents[:5]
+        test_decoded = self(test_latents).view(-1, 28, 28)
+
+        self._plot_images(test_decoded, "test_set_latents_images", "Images from Test Set Latents")
+
+    def infer_random_latents(self, file_name, title, num_samples=5):
+        random_latents = torch.rand(5, self.latent_dim).to(self.model.device)
+        random_decoded = self.model(random_latents).view(-1, 28, 28)
+        self._plot_images(random_decoded, file_name, title)
+        
+
+    def _plot_images(self, images, file_name, title):
+        print("Saving images...")
+        os.makedirs('output_images', exist_ok=True)
+        fig, axes = plt.subplots(1, 5, figsize=(10, 2))
+        for i, ax in enumerate(axes):
+            ax.imshow(images[i].cpu().detach().numpy(), cmap='gray')
+            ax.axis('off')
+        plt.suptitle(title)
+        output_path = f"output_images/{file_name}.png"
+        plt.savefig(output_path)
+        print(f"Images saved to {output_path}")
+        plt.close()
+    
     def plot_tsne(self):
         print("Generating t-SNE plot...")
         plot_tsne(self.test_ds, self.test_latents, file_name='tsne_plot_VAD.png', plot_title="t-SNE Test Latents - VAD")
@@ -187,9 +222,19 @@ class VariationalAutoDecoderNormal(VariationalAutoDecoder):
 
         return mu + sigma * epsilon
     
+    def get_test_samples_images(self):
+        file_name = "test_set_latents_images_VAD_normal"
+        title = "Images from Test Set Latents - VAD Normal Distribution"
+        self.infer_test_latents(file_name, title)
+    
+    def get_random_samples_images(self):
+        file_name = "random_latents_images_VAD_normal"
+        title = "Images from Random Latents - VAD Normal Distribution"
+        self.infer_random_latents(file_name, title)
+    
 
     
-class VariationalAutoDecoderLaplase(VariationalAutoDecoder):
+class VariationalAutoDecoderLaplace(VariationalAutoDecoder):
     def __init__(self, latent_dim=128, data_path='dataset', batch_size=64, lr=0.005):
         super().__init__(latent_dim, data_path, batch_size, lr)
         self.laplace_dist = torch.distributions.Laplace(0, 1)
@@ -221,6 +266,17 @@ class VariationalAutoDecoderLaplase(VariationalAutoDecoder):
         
         # Mean over batch
         return torch.mean(kl_loss)
+    
+    def get_test_samples_images(self):
+        file_name = "test_set_latents_images_VAD_laplace"
+        title = "Images from Test Set Latents - VAD Laplace Distribution"
+        self.infer_test_latents(file_name, title)
+    
+    def get_random_samples_images(self):
+        file_name = "random_latents_images_VAD_laplace"
+        title = "Images from Random Latents - VAD Laplace Distribution"
+        self.infer_random_latents(file_name, title)
+    
 
 class VariationalAutoDecoderExponential(VariationalAutoDecoder):
     def __init__(self, latent_dim=128, data_path='dataset', batch_size=64, lr=0.005, lambda_rate=1):
@@ -251,10 +307,21 @@ class VariationalAutoDecoderExponential(VariationalAutoDecoder):
         # Mean over batch
         return torch.mean(kl_loss)
     
+    def get_test_samples_images(self):
+        file_name = "test_set_latents_images_VAD_exponential"
+        title = "Images from Test Set Latents - VAD Exponential Distribution"
+        self.infer_test_latents(file_name, title)
+    
+    def get_random_samples_images(self):
+        file_name = "random_latents_images_VAD_exponential"
+        title = "Images from Random Latents - VAD Exponential Distribution"
+        self.infer_random_latents(file_name, title)
+    
+    
 
 
-model = VariationalAutoDecoderNormal()
-train_loss,_,_ = model.train_model(num_epochs=5)
+# model = VariationalAutoDecoderNormal()
+# train_loss,_,_ = model.train_model(num_epochs=5)
 # print(f'Training loss: {train_loss:.4f}')
 # test_loss = model.test_vad(num_epochs=100)
 # print(f'Test loss: {test_loss:.4f}')
