@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 
-class Decoder(torch.nn.Module):
+class VAD_Decoder(torch.nn.Module):
     def __init__(self, latent_dim=128):
-        super(Decoder, self).__init__()
+        super(VAD_Decoder, self).__init__()
         self.decoder = nn.Sequential(
             nn.Linear(latent_dim, 256 * 7 * 7),  # Map to 256 channels with 7x7 spatial dimensions
             nn.ReLU(inplace=True),

@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
 import os
 
-from Decoder import Decoder
+from VAD_Decoder import VAD_Decoder
 
 
 class VariationalAutoDecoder(nn.Module, ABC):
@@ -22,7 +22,7 @@ class VariationalAutoDecoder(nn.Module, ABC):
         self.num_samples_in_dataset = len(self.train_ds)
         self.learning_rate = lr
 
-        self.decoder = Decoder(latent_dim=self.latent_dim).to(self.device)
+        self.decoder = VAD_Decoder(latent_dim=self.latent_dim).to(self.device)
         self.optimizer = torch.optim.Adam([{'params': self.parameters()}], lr=self.learning_rate)
 
         self.to(self.device)
