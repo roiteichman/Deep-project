@@ -25,4 +25,4 @@ class VAD_Decoder(torch.nn.Module):
 
     def forward(self, x):
         out = self.decoder(x)
-        return out * 255.0
+        return out
