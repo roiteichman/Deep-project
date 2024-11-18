@@ -23,7 +23,6 @@ class VariationalAutoDecoder(nn.Module, ABC):
         self.learning_rate = lr
 
         self.decoder = VAD_Decoder(latent_dim=self.latent_dim).to(self.device)
-        self.optimizer = torch.optim.Adam([{'params': self.parameters()}], lr=self.learning_rate)
 
         self.to(self.device)
         
@@ -62,14 +61,17 @@ class VariationalAutoDecoder(nn.Module, ABC):
     def _get_distribution_parameters(self, indices):
         pass
 
+    @abstractmethod
+    def fit_and_train(self, num_epochs=100, beta=1, verbose=True):
+        pass
+
     # Training the VAD model
-    def train_model(self, num_epochs=100, beta=3.8, lr=0.005, verbose=True):
+    def train_model(self, optimizer, num_epochs=100, beta=1, verbose=True):
         print("Training the VAD model...")
         self.train()
         total_losses = []
         recon_losses = []
         kl_losses = []
-        self.learning_rate = lr
         for epoch in range(num_epochs):
             total_loss = 0
             total_recon_loss = 0
@@ -77,7 +79,7 @@ class VariationalAutoDecoder(nn.Module, ABC):
             for batch_idx, (i, data) in enumerate(self.train_dl):
                 data = data.float().to(self.device)
 
-                self.optimizer.zero_grad()
+                optimizer.zero_grad()
                 
                 params = self._get_distribution_parameters(indices=i)
                 # Forward pass
@@ -86,7 +88,7 @@ class VariationalAutoDecoder(nn.Module, ABC):
                 # Compute loss
                 loss, recon_loss, kl_loss = self._vad_loss(recon_x=recon_x, x=data, indices=i, beta=beta)
                 loss.backward()
-                self.optimizer.step()
+                optimizer.step()
                 
                 total_loss += loss.item()
                 total_recon_loss += recon_loss.item()
@@ -194,6 +196,9 @@ class VariationalAutoDecoderNormal(VariationalAutoDecoder):
 
         self.optimizer = torch.optim.Adam([{'params': self.parameters()}, {'params': self.mus}, {'params': self.log_vars}], lr=self.learning_rate)
 
+    def fit_and_train(self, num_epochs=100, beta=2, verbose=True):
+        return self.train_model(self.optimizer, num_epochs, beta, verbose)
+
     def forward(self, distribution_params):
         mu = distribution_params[:, :self.latent_dim]
         log_var = distribution_params[:, self.latent_dim:]
@@ -295,7 +300,9 @@ class VariationalAutoDecoderLaplace(VariationalAutoDecoder):
     def _get_kl_divergence(self, indices):
         b = torch.exp(self.log_bs[indices])
         mu = self.mus[indices]
-        kl_loss = torch.log(b) + torch.abs(mu) / b - 1
+        kl_loss = torch.log(b) + (torch.abs(mu) + b) / 1.0 - 1
+        
+
         
         # Mean over batch
         return torch.mean(kl_loss)
@@ -351,20 +358,16 @@ class VariationalAutoDecoderExponential(VariationalAutoDecoder):
     
     def _reparameterize(self, log_lambda):
         lambda_param = torch.exp(log_lambda)  # Avoid log(0) by clipping
-        # uniform random variable from [0, 1] - caused problems
-        # epsilon = torch.rand_like(lambda_param)
+        epsilon = torch.rand_like(lambda_param)
         epsilon = self.exp_dist.sample(log_lambda.shape).to(self.device)
         # Reparameterize to get samples from an exponential distribution
-        z = epsilon * (1/lambda_param)
+        z = -torch.log(epsilon) /lambda_param
         return z 
     
     def _get_kl_divergence(self, indices):
-        lambda_param = torch.exp(self.log_lambda[indices])  # Avoid log(0) by clipping
+        lambda_param = torch.exp(self.log_lambda[indices])
 
-        kl_loss = torch.sum(
-            torch.log(lambda_param / self.lambda_rate) + (self.lambda_rate / lambda_param) - 1,
-            dim=1  # Sum over latent dimensions
-        )
+        kl_loss = -self.log_lambda[indices] + lambda_param - 1
         # Mean over batch
         return torch.mean(kl_loss)
     
@@ -414,8 +417,8 @@ class VariationalAutoDecoderUniform(VariationalAutoDecoder):
     
 
 
-model = VariationalAutoDecoderLaplace()
-train_loss,_,_ = model.train_model(num_epochs=5, beta=2)
+model = VariationalAutoDecoderNormal()
+train_loss,_,_ = model.fit_and_train(num_epochs=5, beta=2)
 print(f'Training loss: {train_loss:.4f}')
 test_loss = model.test_vad(num_epochs=5)
 print(f'Test loss: {test_loss:.4f}')
