@@ -79,7 +79,6 @@ class VariationalAutoDecoder(nn.Module, ABC):
             for batch_idx, (i, data) in enumerate(self.train_dl):
                 data = data.float().to(self.device)
 
-                optimizer.zero_grad()
                 
                 params = self._get_distribution_parameters(indices=i)
                 # Forward pass
@@ -87,6 +86,8 @@ class VariationalAutoDecoder(nn.Module, ABC):
                 
                 # Compute loss
                 loss, recon_loss, kl_loss = self._vad_loss(recon_x=recon_x, x=data, indices=i, beta=beta)
+                
+                optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
                 
@@ -122,16 +123,16 @@ class VariationalAutoDecoder(nn.Module, ABC):
     def get_random_samples_images(self):
         pass
     
-    def infer_test_latents(self, file_name, title, num_samples=5):
+    def infer_test_latents(self, file_name="test_set_latents_images", title="Images from Test Set Latents", num_samples=5):
 
-        test_latents = self.test_latents[:5]
+        test_latents = self.test_latents[:num_samples]
         test_decoded = self(test_latents).view(-1, 28, 28)
 
-        self._plot_images(test_decoded, "test_set_latents_images", "Images from Test Set Latents")
+        self._plot_images(test_decoded,file_name, title)
 
-    def infer_random_latents(self, file_name, title, num_samples=5):
-        random_latents = torch.rand(5, self.latent_dim).to(self.model.device)
-        random_decoded = self.model(random_latents).view(-1, 28, 28)
+    def infer_random_latents(self, file_name="test_set_latents_images", title="Images from Test Set Latents", num_samples=5):
+        random_latents = torch.rand(num_samples, self.latent_dim).to(self.device)
+        random_decoded = self(random_latents).view(-1, 28, 28)
         self._plot_images(random_decoded, file_name, title)
         
 
@@ -187,14 +188,12 @@ class VariationalAutoDecoder(nn.Module, ABC):
 class VariationalAutoDecoderNormal(VariationalAutoDecoder):
     def __init__(self, latent_dim=128, data_path='dataset', batch_size=64, lr=0.005):
         super().__init__(latent_dim, data_path, batch_size, lr)
-                
-        self.mus = torch.randn(self.num_samples_in_dataset, self.latent_dim, requires_grad=True, device=self.device)
-        self.log_vars = torch.randn(self.num_samples_in_dataset, self.latent_dim, requires_grad=True, device=self.device)
+        
+        self.train_parameters = torch.randn(self.num_samples_in_dataset, 2 * self.latent_dim, requires_grad=True, device=self.device)
 
-        assert self.mus.requires_grad == True
-        assert self.log_vars.requires_grad == True
+        assert self.train_parameters.requires_grad == True
 
-        self.optimizer = torch.optim.Adam([{'params': self.parameters()}, {'params': self.mus}, {'params': self.log_vars}], lr=self.learning_rate)
+        self.optimizer = torch.optim.Adam(list(self.parameters()) + [self.train_parameters], lr=self.learning_rate)
 
     def fit_and_train(self, num_epochs=100, beta=2, verbose=True):
         return self.train_model(self.optimizer, num_epochs, beta, verbose)
@@ -206,11 +205,12 @@ class VariationalAutoDecoderNormal(VariationalAutoDecoder):
         return self.decode(z)
 
     def _get_distribution_parameters(self, indices):
-        return torch.cat((self.mus[indices], self.log_vars[indices]), dim=1)
+        return self.train_parameters[indices]
     
     def _get_kl_divergence(self, indices):
-        mu = self.mus[indices]
-        log_var = self.log_vars[indices]
+        distribution_params = self.train_parameters[indices]
+        mu = distribution_params[:, :self.latent_dim]
+        log_var = distribution_params[:, self.latent_dim:]
         kl_divergence = -0.5 * torch.mean(1 + log_var - mu.pow(2) - log_var.exp())
         return kl_divergence
     
@@ -230,16 +230,18 @@ class VariationalAutoDecoderNormal(VariationalAutoDecoder):
     def test_vad(self, num_epochs=100, learning_rate=0.005):
         print("Testing the VAD model...")
         self.eval()
-        self.test_mus = torch.randn(self.num_samples_in_dataset, self.latent_dim, requires_grad=True, device=self.device)
-        self.test_log_vars = torch.randn(self.num_samples_in_dataset, self.latent_dim, requires_grad=True, device=self.device)
+        self.test_parameters = torch.randn(self.num_samples_in_dataset, 2 * self.latent_dim, requires_grad=True, device=self.device)
 
-        assert self.test_mus.requires_grad == True
-        assert self.test_log_vars.requires_grad == True
+        assert self.test_parameters.requires_grad == True
 
-        self.test_parameters = torch.cat((self.test_mus, self.test_log_vars), dim=1)
-        test_optimizer = torch.optim.Adam([{'params': self.test_mus}, {'params': self.test_log_vars}], lr=learning_rate)
+        test_optimizer = torch.optim.Adam([self.test_parameters], lr=learning_rate)
         test_loss = evaluate_model(self, self.test_dl, test_optimizer, self.test_parameters, 
                                    num_epochs, self.device)
+        
+        mu = self.test_parameters[:, :self.latent_dim]
+        log_var = self.test_parameters[:, self.latent_dim:]
+        self.test_latents = self._reparameterize(mu, log_var)
+
         return test_loss
     
     def get_test_samples_images(self):
@@ -259,13 +261,11 @@ class VariationalAutoDecoderLaplace(VariationalAutoDecoder):
         super().__init__(latent_dim, data_path, batch_size, lr)
         self.laplace_dist = torch.distributions.Laplace(0, 1)
 
-        self.mus = nn.Parameter(torch.zeros(self.num_samples_in_dataset, self.latent_dim).to(self.device))
-        self.log_bs = nn.Parameter(self.laplace_dist.sample((self.num_samples_in_dataset, self.latent_dim)).to(self.device))
+        self.train_parameters = torch.randn(self.num_samples_in_dataset, 2 * self.latent_dim, requires_grad=True, device=self.device)
 
-        assert self.mus.requires_grad == True
-        assert self.log_bs.requires_grad == True
+        assert self.train_parameters.requires_grad == True
     
-        self.optimizer = torch.optim.Adam([{'params': self.parameters()}], lr=self.learning_rate)
+        self.optimizer = torch.optim.Adam(list(self.parameters()) + [self.train_parameters], lr=self.learning_rate)
 
     def forward(self, distribution_params):
         mu = distribution_params[:, :self.latent_dim]
@@ -274,20 +274,21 @@ class VariationalAutoDecoderLaplace(VariationalAutoDecoder):
         return self.decode(z)
     
     def _get_distribution_parameters(self, indices):
-        return torch.cat((self.mus[indices], self.log_bs[indices]), dim=1)
+        return self.train_parameters[indices]
     
     def test_vad(self, num_epochs=100, learning_rate=0.005):
         print("Testing the VAD model...")
         self.eval()
-        self.test_mus = nn.Parameter(torch.zeros(self.num_samples_in_dataset, self.latent_dim).to(self.device))
-        self.test_log_bs = nn.Parameter(self.laplace_dist.sample((self.num_samples_in_dataset, self.latent_dim)).to(self.device))
-        assert self.test_mus.requires_grad == True
-        assert self.test_log_bs.requires_grad == True
+        self.test_parameters = torch.randn(self.num_samples_in_dataset, 2 * self.latent_dim, requires_grad=True, device=self.device)
 
-        self.test_parameters = torch.cat((self.test_mus, self.test_log_bs), dim=1)
-        test_optimizer = torch.optim.Adam([{'params': self.test_mus}, {'params': self.test_log_bs}], lr=learning_rate)
+        test_optimizer = torch.optim.Adam([self.test_parameters], lr=learning_rate)
         test_loss = evaluate_model(self, self.test_dl, test_optimizer, self.test_parameters, 
                                    num_epochs, self.device)
+        
+        mu = self.test_parameters[:, :self.latent_dim]
+        log_b = self.test_parameters[:, self.latent_dim:]
+        self.test_latents = self._reparameterize(mu, log_b)
+
         return test_loss
 
 
@@ -298,11 +299,11 @@ class VariationalAutoDecoderLaplace(VariationalAutoDecoder):
         return mu + b * epsilon
     
     def _get_kl_divergence(self, indices):
-        b = torch.exp(self.log_bs[indices])
-        mu = self.mus[indices]
+        params = self.train_parameters[indices]
+        mu = params[:, :self.latent_dim]
+        log_b = params[:, self.latent_dim:]
+        b = torch.exp(log_b)
         kl_loss = torch.log(b) + (torch.abs(mu) + b) / 1.0 - 1
-        
-
         
         # Mean over batch
         return torch.mean(kl_loss)
@@ -324,13 +325,11 @@ class VariationalAutoDecoderExponential(VariationalAutoDecoder):
         self.lambda_rate = lambda_rate
         self.exp_dist = torch.distributions.Exponential(self.lambda_rate)
 
-        self.log_lambda = nn.Parameter(
-            torch.normal(mean=0.1, std=0.1, size=(self.num_samples_in_dataset, self.latent_dim)).to(self.device)
-        )
-        
-        self.optimizer = torch.optim.Adam([{'params': self.parameters()}], lr=self.learning_rate)
+        self.log_lambda = torch.randn(self.num_samples_in_dataset, self.latent_dim, requires_grad=True, device=self.device)
 
         assert self.log_lambda.requires_grad == True
+        
+        self.optimizer = torch.optim.Adam(list(self.parameters) + [self.log_lambda], lr=self.learning_rate)
 
     def forward(self, distribution_params):
         log_lambda = distribution_params
@@ -344,20 +343,19 @@ class VariationalAutoDecoderExponential(VariationalAutoDecoder):
         print("Testing the VAD model...")
         self.eval()
        
-        self.test_log_lambda = nn.Parameter(
-            torch.normal(mean=0.1, std=0.1, size=(self.num_samples_in_dataset, self.latent_dim)).to(self.device)
-        )
+        self.test_log_lambda = torch.randn(self.num_samples_in_dataset, self.latent_dim, requires_grad=True, device=self.device)
         assert self.test_log_lambda.requires_grad == True
 
-        self.test_parameters = self.test_log_lambda
         test_optimizer = torch.optim.Adam([{'params': self.test_log_lambda}], lr=learning_rate)
-        test_loss = evaluate_model(self, self.test_dl, test_optimizer, self.test_parameters, 
+        test_loss = evaluate_model(self, self.test_dl, test_optimizer, self.test_log_lambda, 
                                    num_epochs, self.device)
+        
+        self.test_latents = self._reparameterize(self.test_log_lambda)
         return test_loss
 
     
     def _reparameterize(self, log_lambda):
-        lambda_param = torch.exp(log_lambda)  # Avoid log(0) by clipping
+        lambda_param = torch.exp(log_lambda)
         epsilon = torch.rand_like(lambda_param)
         epsilon = self.exp_dist.sample(log_lambda.shape).to(self.device)
         # Reparameterize to get samples from an exponential distribution
@@ -365,9 +363,10 @@ class VariationalAutoDecoderExponential(VariationalAutoDecoder):
         return z 
     
     def _get_kl_divergence(self, indices):
-        lambda_param = torch.exp(self.log_lambda[indices])
+        log_lambda = self.log_lambda[indices]
+        lambda_param = torch.exp(log_lambda)
 
-        kl_loss = -self.log_lambda[indices] + lambda_param - 1
+        kl_loss = -log_lambda + lambda_param - 1
         # Mean over batch
         return torch.mean(kl_loss)
     
@@ -380,41 +379,6 @@ class VariationalAutoDecoderExponential(VariationalAutoDecoder):
         file_name = "random_latents_images_VAD_exponential"
         title = "Images from Random Latents - VAD Exponential Distribution"
         self.infer_random_latents(file_name, title)
-    
-class VariationalAutoDecoderUniform(VariationalAutoDecoder):
-    def __init__(self, latent_dim=128, data_path='dataset', batch_size=64, lr=0.005):
-        super().__init__(latent_dim, data_path, batch_size, lr)
-
-        self.a = nn.Parameter(torch.rand(self.num_samples_in_dataset, self.latent_dim) * 0.1)
-        self.b = nn.Parameter(torch.rand(self.num_samples_in_dataset, self.latent_dim) * 0.1 + 0.9)
-
-        assert self.a.requires_grad == True
-        assert self.b.requires_grad == True
-
-        self.optimizer = torch.optim.Adam([{'params': self.parameters()}], lr=self.learning_rate)
-
-    
-    def _reparameterize(self, a, b):
-        epsilon = torch.rand_like(a)  # Uniform(0, 1)
-        return a + epsilon * (b - a)
-        
-    def _get_kl_divergence(self, indices):
-        delta = 1e-8
-        a = self.a[indices]
-        b = self.b[indices]
-        kl_divergence = torch.log(b - a + delta) # add delta to avoid log(0)
-        return torch.mean(kl_divergence)
-    
-    def get_test_samples_images(self):
-        file_name = "test_set_latents_images_VAD_uniform"
-        title = "Images from Test Set Latents - VAD Uniform Distribution"
-        self.infer_test_latents(file_name, title)
-    
-    def get_random_samples_images(self):
-        file_name = "random_latents_images_VAD_uniform"
-        title = "Images from Random Latents - VAD Uniform Distribution"
-        self.infer_random_latents(file_name, title)
-    
 
 
 model = VariationalAutoDecoderNormal()
