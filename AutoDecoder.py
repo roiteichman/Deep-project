@@ -109,13 +109,13 @@ class Trainer:
 
     def test_samples(self):
         print("Generating random samples...")
-        random_latents = torch.rand(5, self.latent_dim).to(self.model.device)
+        random_latents = torch.randn(5, self.latent_dim).to(self.model.device)
         random_decoded = self.model(random_latents).view(-1, 28, 28)
 
         test_latents = self.model.test_latents[:5]
         test_decoded = self.model(test_latents).view(-1, 28, 28)
 
-        self._plot_images(random_decoded, "random_latents_images", "Images from Random Latents (U(0, I))")
+        self._plot_images(random_decoded, "random_latents_images", "Images from Random Latents (N(0, I))")
         self._plot_images(test_decoded, "test_set_latents_images", "Images from Test Set Latents")
 
     def plot_tsne(self):

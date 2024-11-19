@@ -379,10 +379,3 @@ class VariationalAutoDecoderExponential(VariationalAutoDecoder):
         file_name = "random_latents_images_VAD_exponential"
         title = "Images from Random Latents - VAD Exponential Distribution"
         self.infer_random_latents(file_name, title)
-
-
-model = VariationalAutoDecoderNormal()
-train_loss,_,_ = model.fit_and_train(num_epochs=5, beta=2)
-print(f'Training loss: {train_loss:.4f}')
-test_loss = model.test_vad(num_epochs=5)
-print(f'Test loss: {test_loss:.4f}')
