@@ -267,6 +267,10 @@ class VariationalAutoDecoderLaplace(VariationalAutoDecoder):
     
         self.optimizer = torch.optim.Adam(list(self.parameters()) + [self.train_parameters], lr=self.learning_rate)
 
+    def fit_and_train(self, num_epochs=100, beta=2, verbose=True):
+        return self.train_model(self.optimizer, num_epochs, beta, verbose)
+
+
     def forward(self, distribution_params):
         mu = distribution_params[:, :self.latent_dim]
         log_b = distribution_params[:, self.latent_dim:]
@@ -293,17 +297,21 @@ class VariationalAutoDecoderLaplace(VariationalAutoDecoder):
 
 
     def _reparameterize(self, mu, log_b):
-        b = torch.exp(log_b)
-        epsilon = self.laplace_dist.sample(b.shape).to(self.device)
+        u = torch.clamp(torch.rand(log_b.shape).to(self.device), min=1e-8, max=1-1e-8)
+        b = torch.exp(log_b) + 1e-8  # Add a small value to avoid log(0)
 
-        return mu + b * epsilon
+        z = torch.where(u < 0.5,
+                        mu + b * torch.log(2 * u),  # For u < 0.5
+                        mu - b * torch.log(2 * (1 - u))) # For u >= 0.5
+
+        return z
     
     def _get_kl_divergence(self, indices):
         params = self.train_parameters[indices]
         mu = params[:, :self.latent_dim]
         log_b = params[:, self.latent_dim:]
         b = torch.exp(log_b)
-        kl_loss = torch.log(b) + (torch.abs(mu) + b) / 1.0 - 1
+        kl_loss = log_b -1 + ((torch.abs(mu) + 1) / b) 
         
         # Mean over batch
         return torch.mean(kl_loss)
@@ -329,7 +337,7 @@ class VariationalAutoDecoderExponential(VariationalAutoDecoder):
 
         assert self.log_lambda.requires_grad == True
         
-        self.optimizer = torch.optim.Adam(list(self.parameters) + [self.log_lambda], lr=self.learning_rate)
+        self.optimizer = torch.optim.Adam(list(self.parameters()) + [self.log_lambda], lr=self.learning_rate)
 
     def forward(self, distribution_params):
         log_lambda = distribution_params
@@ -352,12 +360,14 @@ class VariationalAutoDecoderExponential(VariationalAutoDecoder):
         
         self.test_latents = self._reparameterize(self.test_log_lambda)
         return test_loss
+    
+    def fit_and_train(self, num_epochs=100, beta=2, verbose=True):
+        return self.train_model(self.optimizer, num_epochs, beta, verbose)
 
     
     def _reparameterize(self, log_lambda):
         lambda_param = torch.exp(log_lambda)
-        epsilon = torch.rand_like(lambda_param)
-        epsilon = self.exp_dist.sample(log_lambda.shape).to(self.device)
+        epsilon = torch.clamp(torch.rand(log_lambda.shape).to(self.device), min=1e-8, max=1-1e-8)
         # Reparameterize to get samples from an exponential distribution
         z = -torch.log(epsilon) /lambda_param
         return z 
@@ -379,3 +389,7 @@ class VariationalAutoDecoderExponential(VariationalAutoDecoder):
         file_name = "random_latents_images_VAD_exponential"
         title = "Images from Random Latents - VAD Exponential Distribution"
         self.infer_random_latents(file_name, title)
+
+if __name__ == '__main__':
+    model = VariationalAutoDecoderLaplace(latent_dim=128, data_path='dataset', batch_size=64, lr=0.1)
+    train_loss,_,_ = model.fit_and_train(num_epochs=7, beta=1, verbose=True)
