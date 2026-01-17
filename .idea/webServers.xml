@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="c6ef20d9-e89f-491f-89a5-087c1da7fe2d" name="deep">
+        <fileTransfer rootFolder="/home/roi.teichman" accessType="SFTP" host="132.68.39.159" port="22" sshConfigId="2aa1c2e6-ae6a-4eba-954e-9d40f1a72def" sshConfig="deep server">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

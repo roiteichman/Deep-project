@@ -9,7 +9,6 @@ dependencies:
   - pytorch-cuda=12.1
   - pytorch-mutex=1.0
   - torchaudio=2.4.0
-  - torchtriton=3.0.0
   - torchvision=0.19.0
   - scikit-learn
   - scipy
